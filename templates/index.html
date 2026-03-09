@@ -4,53 +4,59 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@1/css/pico.min.css">
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <title>Calorie Dashboard</title>
+    <title>AI Calorie Tracker</title>
 </head>
 <body>
     <main class="container">
-        <nav>
-            <ul><li><strong>🔥 My Calorie Tracker</strong></li></ul>
-        </nav>
+        <hgroup>
+            <h1>🔥 Calorie Tracker</h1>
+            <h2>Welcome back! Your goal is 2,500 kcal.</h2>
+        </hgroup>
 
         <article>
-            <header>Weekly Progress</header>
-            <canvas id="calorieChart"></canvas>
+            <form method="POST">
+                <label for="food">What did you eat?</label>
+                <input type="text" name="food_input" placeholder="e.g. 2 Bananas or 1 Chicken Burger" required>
+                <button type="submit">Log Calories</button>
+            </form>
         </article>
+
+        <div class="grid">
+            <article>
+                <header>Today</header>
+                <h3 style="color: #10ad8d;">{{ daily_total }} kcal</h3>
+                <progress value="{{ daily_total }}" max="2500"></progress>
+            </article>
+        </div>
+
+        {% if show_report %}
+        <div class="grid">
+            <article>
+                <header>Weekly Total</header>
+                <h3>{{ weekly }} kcal</h3>
+            </article>
+            <article>
+                <header>Monthly Total</header>
+                <h3>{{ monthly }} kcal</h3>
+            </article>
+        </div>
+        <a href="/">Back to Tracker</a>
+        {% else %}
+        <a href="/report" role="button" class="secondary">View Reports</a>
+        {% endif %}
 
         <figure>
             <table>
                 <thead>
-                    <tr><th>Date</th><th>Food Item</th><th>Calories</th></tr>
+                    <tr><th>Food</th><th>Cals</th><th>Date</th></tr>
                 </thead>
                 <tbody>
                     {% for log in logs %}
-                    <tr>
-                        <td>{{ log[2] }}</td>
-                        <td>{{ log[0] }}</td>
-                        <td>{{ log[1] }} kcal</td>
-                    </tr>
+                    <tr><td>{{ log[0] }}</td><td>{{ log[1] }}</td><td>{{ log[2] }}</td></tr>
                     {% endfor %}
                 </tbody>
             </table>
         </figure>
     </main>
-
-    <script>
-        const ctx = document.getElementById('calorieChart').getContext('2d');
-        new Chart(ctx, {
-            type: 'line',
-            data: {
-                labels: {{ dates | tojson }},
-                datasets: [{
-                    label: 'Calories Consumed',
-                    data: {{ totals | tojson }},
-                    borderColor: '#10ad8d',
-                    tension: 0.1
-                }]
-            }
-        });
-    </script>
 </body>
 </html>
-
