@@ -1,60 +1,72 @@
-from flask import Flask, render_template, request
-import sqlite3, google.generativeai as genai
-from telegram import Bot, Update
+import sqlite3
+import google.generativeai as genai
+from flask import Flask, render_template, request, redirect, url_for
 from datetime import datetime, timedelta
 
 app = Flask(__name__)
 
-# Config
-TOKEN = "YOUR_TELEGRAM_TOKEN"
-genai.configure(api_key="YOUR_GEMINI_KEY")
+# --- Configuration ---
+# Replace with your actual Gemini API Key
+genai.configure(api_key="AIzaSyCHdS_4-L7p-xlDit3CkRHeQtDvdG1XtZQ")
 model = genai.GenerativeModel('gemini-1.5-flash')
-bot = Bot(token=TOKEN)
 
-def get_db():
+def init_db():
     conn = sqlite3.connect("tracker.db")
-    return conn
-
-# --- Dashboard Route ---
-@app.route('/')
-def dashboard():
-    conn = get_db()
     c = conn.cursor()
-    # Get all logs for the table
-    c.execute("SELECT food, cal, date FROM logs ORDER BY date DESC LIMIT 10")
-    logs = c.fetchall()
-    
-    # Get data for Chart.js (Last 7 days)
-    c.execute("SELECT date, SUM(cal) FROM logs GROUP BY date ORDER BY date ASC LIMIT 7")
-    chart_data = c.fetchall()
-    dates = [row[0] for row in chart_data]
-    totals = [row[1] for row in chart_data]
+    c.execute('''CREATE TABLE IF NOT EXISTS logs 
+                 (id INTEGER PRIMARY KEY, food TEXT, calories INTEGER, date TEXT)''')
+    conn.commit()
+    conn.close()
+
+# --- Routes ---
+@app.route('/', methods=['GET', 'POST'])
+def index():
+    conn = sqlite3.connect("tracker.db")
+    c = conn.cursor()
+
+    if request.method == 'POST':
+        user_input = request.form.get('food_input')
+        # Use AI to parse text to calories
+        prompt = f"How many calories are in '{user_input}'? Return ONLY the total number as an integer."
+        response = model.generate_content(prompt)
+        try:
+            calories = int(response.text.strip())
+            today = datetime.now().strftime("%Y-%m-%d")
+            c.execute("INSERT INTO logs (food, calories, date) VALUES (?, ?, ?)", (user_input, calories, today))
+            conn.commit()
+        except:
+            pass # Handle AI errors gracefully
+        return redirect(url_for('index'))
+
+    # Get data for Dashboard
+    today_str = datetime.now().strftime("%Y-%m-%d")
+    c.execute("SELECT SUM(calories) FROM logs WHERE date=?", (today_str,))
+    daily_total = c.fetchone()[0] or 0
+
+    # Get Recent Logs
+    c.execute("SELECT food, calories, date FROM logs ORDER BY id DESC LIMIT 5")
+    recent_logs = c.fetchall()
     
     conn.close()
-    return render_template('index.html', logs=logs, dates=dates, totals=totals)
+    return render_template('index.html', daily_total=daily_total, logs=recent_logs)
 
-# --- Telegram Webhook Route ---
-@app.route(f'/{TOKEN}', methods=['POST'])
-def telegram_webhook():
-    update = Update.de_json(request.get_json(force=True), bot)
-    if update.message:
-        text = update.message.text
-        res = model.generate_content(f"Calories in '{text}'? Return ONLY the number.")
-        try:
-            cals = int(res.text.strip())
-            date_str = datetime.now().strftime("%Y-%m-%d")
-            
-            conn = get_db()
-            c = conn.cursor()
-            c.execute("INSERT INTO logs (food, cal, date) VALUES (?, ?, ?)", (text, cals, date_str))
-            conn.commit()
-            conn.close()
-            
-            bot.send_message(chat_id=update.message.chat.id, text=f"✅ Logged {cals} kcal!")
-        except:
-            bot.send_message(chat_id=update.message.chat.id, text="Error parsing calories.")
-    return "ok"
+@app.route('/report')
+def report():
+    conn = sqlite3.connect("tracker.db")
+    c = conn.cursor()
+    today = datetime.now()
+    week_ago = (today - timedelta(days=7)).strftime("%Y-%m-%d")
+    month_ago = (today - timedelta(days=30)).strftime("%Y-%m-%d")
 
-if __name__ == "__main__":
-    app.run(host='0.0.0.0', port=5000)
-  
+    c.execute("SELECT SUM(calories) FROM logs WHERE date >= ?", (week_ago,))
+    weekly = c.fetchone()[0] or 0
+    c.execute("SELECT SUM(calories) FROM logs WHERE date >= ?", (month_ago,))
+    monthly = c.fetchone()[0] or 0
+    
+    conn.close()
+    return render_template('index.html', weekly=weekly, monthly=monthly, show_report=True)
+
+if __name__ == '__main__':
+    init_db()
+    app.run(host='0.0.0.0', port=5000, debug=True)
+    
