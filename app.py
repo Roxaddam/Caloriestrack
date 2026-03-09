@@ -66,7 +66,10 @@ def report():
     conn.close()
     return render_template('index.html', weekly=weekly, monthly=monthly, show_report=True)
 
+# Move the database initialization outside of the 'if __name__ == "__main__"' block
+# This ensures it runs even when Gunicorn starts the app on Render
+init_db()
+
 if __name__ == '__main__':
-    init_db()
     app.run(host='0.0.0.0', port=5000, debug=True)
     
